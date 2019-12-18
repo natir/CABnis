@@ -1,0 +1,29 @@
+[package]
+name = "cabanis"
+version = "0.1.0"
+authors = ["Pierre Marijon <pierre@marijon.fr>"]
+edition = "2018"
+
+[dependencies]
+bio            = "0.30"
+bv             = "0.11.0"
+cocktail       = { git = "https://github.com/natir/cocktail" }
+itertools      = "0.8"
+petgraph       = "0.5"
+
+# CLI management
+structopt      = "0.3"
+
+# Logging and error management
+log 	       = "0.4"
+anyhow         = "1.0"
+thiserror      = "1.0"
+env_logger     = "0.7"
+
+[profile.release]
+debug = true # uncomment for profiling
+lto = 'thin'
+opt-level = 3
+overflow-checks = false
+panic = 'abort'
+incremental = false
