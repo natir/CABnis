@@ -36,6 +36,8 @@ extern crate bio;
 extern crate bv;
 extern crate cocktail;
 extern crate itertools;
+extern crate niffler;
+extern crate pcon;
 extern crate petgraph;
 
 /* local mod */
@@ -58,16 +60,54 @@ fn main() -> Result<()> {
 
     let params = cli::Command::from_args();
 
-    info!("Begin of read solidity information");
-    let (k, data) = cocktail::io::read_solidity_bitfield(
-        std::io::BufReader::new(std::fs::File::open(&params.solidity).with_context(|| {
-            Error::CantReadFile {
-                filename: params.solidity.clone(),
+    let (k, data) = match &params.subcmd {
+        cli::SubCommand::Count(subcmd_params) => {
+            info!("Begin of read solidity information");
+
+            let (k, data) = cocktail::io::read_solidity_bitfield(
+                std::io::BufReader::new(std::fs::File::open(&subcmd_params.input).with_context(
+                    || Error::CantReadFile {
+                        filename: subcmd_params.input.clone(),
+                    },
+                )?),
+                std::fs::metadata(&subcmd_params.input).unwrap().len(),
+            );
+
+            info!("End of read solidity information");
+
+            (k, data)
+        }
+        cli::SubCommand::Reads(subcmd_params) => {
+            info!("Begin of kmer counting");
+
+            let mut count = pcon::count::Count::new(subcmd_params.kmer_size, 8);
+
+            let (reader, _) = niffler::get_reader(Box::new(std::io::BufReader::new(
+                std::fs::File::open(&subcmd_params.input).with_context(|| Error::CantReadFile {
+                    filename: subcmd_params.input.clone(),
+                })?,
+            )))?;
+
+            let fasta_reader = bio::io::fasta::Reader::new(reader);
+
+            for record in fasta_reader.records() {
+                let result = record.with_context(|| Error::ReadingError {
+                    filename: subcmd_params.input.clone(),
+                })?;
+
+                count.add_sequence(result.seq());
             }
-        })?),
-        std::fs::metadata(&params.solidity).unwrap().len(),
-    );
-    info!("End of read solidity information");
+
+            count.clean_buckets();
+
+            info!("End of kmer counting");
+
+            (
+                subcmd_params.kmer_size,
+                count.generate_bitfield(subcmd_params.abundance_min),
+            )
+        }
+    };
 
     let solid = utils::Kmer::new(data, k, params.edge_threshold);
     let mut graph: petgraph::graphmap::DiGraphMap<u64, (u8, char, char)> =

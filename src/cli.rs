@@ -32,14 +32,6 @@ use structopt::StructOpt;
 )]
 pub struct Command {
     #[structopt(
-        short = "s",
-        long = "solidity",
-        required = true,
-        help = "path of solidity input file"
-    )]
-    pub solidity: String,
-
-    #[structopt(
         short = "g",
         long = "gfa",
         required = true,
@@ -70,4 +62,54 @@ pub struct Command {
         help = "All edge in graph are lower than this value"
     )]
     pub edge_threshold: u8,
+
+    #[structopt(subcommand)]
+    pub subcmd: SubCommand,
+}
+
+#[derive(StructOpt, Debug)]
+pub enum SubCommand {
+    #[structopt(about = "Generate unitig graph from pcon count")]
+    Count(Count),
+    #[structopt(about = "Generate unitig graph from reads")]
+    Reads(Reads),
+}
+
+#[derive(StructOpt, Debug)]
+pub struct Count {
+    #[structopt(
+        short = "i",
+        long = "input",
+        required = true,
+        help = "path to pcon solidity file"
+    )]
+    pub input: String,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct Reads {
+    #[structopt(
+        short = "i",
+        long = "input",
+        required = true,
+        help = "path to reads file"
+    )]
+    pub input: String,
+
+    #[structopt(
+        short = "k",
+        long = "kmer-size",
+        required = true,
+        help = "kmer size, if kmer size is even real value is equal to k-1, max value 31"
+    )]
+    pub kmer_size: u8,
+
+    #[structopt(
+        short = "a",
+        long = "abudance-min",
+        default_value = "1",
+        required = true,
+        help = "write only kmer with abudance is higher than this parametre"
+    )]
+    pub abundance_min: u8,
 }

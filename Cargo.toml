@@ -10,6 +10,8 @@ bv             = "0.11.0"
 cocktail       = { git = "https://github.com/natir/cocktail" }
 itertools      = "0.8"
 petgraph       = "0.5"
+pcon	       = { git = "https://github.com/natir/pcon.git" }
+niffler	       = { git = "https://github.com/luizirber/niffler.git", branch="api_1.0"}
 
 # CLI management
 structopt      = "0.3"
