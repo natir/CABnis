@@ -95,7 +95,7 @@ impl Kmer {
 
         None
     }
-
+    
     pub fn predecessors(&self, kmer: u64) -> Option<(Vec<u64>, u8)> {
         for deep in 0..self.max_deep {
             let suffix = kmer >> (2 * (deep + 1));
@@ -127,126 +127,156 @@ impl Kmer {
 
 pub struct Viewed {
     bitvec: bv::BitVec<u8>,
+    k: u8,
 }
 
 impl Viewed {
-    pub fn new(len: u64) -> Self {
+    pub fn new(len: u64, k: u8) -> Self {
         Viewed {
             bitvec: bv::BitVec::new_fill(false, len),
+	    k
         }
     }
 
     pub fn contains(&self, kmer: u64) -> bool {
-        self.bitvec.get(cocktail::kmer::remove_first_bit(kmer))
+        self.bitvec.get(cocktail::kmer::remove_first_bit(cocktail::kmer::cannonical(kmer, self.k)))
     }
 
     pub fn insert(&mut self, kmer: u64) {
         self.bitvec
-            .set(cocktail::kmer::remove_first_bit(kmer), true);
+            .set(cocktail::kmer::remove_first_bit(cocktail::kmer::cannonical(kmer, self.k)), true);
     }
 }
 
-pub fn invert_ori(orientation: char) -> char {
-    if orientation == '+' {
-        '-'
+pub fn build_tig(kmer: u64, k: u8, solid: &Kmer, visited: &mut Viewed) -> (String, u64, u64) {
+    let mut tig = std::collections::VecDeque::new();
+    
+    let mut current = kmer;
+    for n in cocktail::kmer::kmer2seq(current, k).chars() {
+	tig.push_back(n);
+    }
+
+    while let Some((pred, ovl_len)) = solid.predecessors(current) {
+	if pred.len() != 1 {
+	    warn!("prev break on {:?} because multi pred", cocktail::kmer::kmer2seq(current, k));
+	    for n in pred {
+		warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
+	    }
+	    break;
+	}
+
+	if let Some((succ, _)) = solid.successors(current) {
+	    if succ.len() != 1 {
+		warn!("prev break on {:?} because multi succ", cocktail::kmer::kmer2seq(current, k));
+		for n in succ {
+		    warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
+		}
+		break;
+	    }
+	}
+
+	add_kmer_in_tig(pred[0], k, ovl_len, &mut tig, true);
+	current = pred[0];
+	visited.insert(current);
+    }
+    let begin = current;
+
+    current = kmer;
+    
+    while let Some((succ, ovl_len)) = solid.successors(current) {
+	if succ.len() != 1 {
+	    warn!("succ break on {:?} because multi succ ", cocktail::kmer::kmer2seq(current, k));
+	    for n in succ {
+		warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
+	    }
+	    break;
+	}
+
+	if let Some((pred, _)) = solid.predecessors(current) {
+	    if pred.len() != 1 {
+		warn!("succ break on {:?} because multi pred", cocktail::kmer::kmer2seq(current, k));
+		for n in pred {
+		    warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
+		}
+		break;
+	    }
+	}
+
+	add_kmer_in_tig(succ[0], k, ovl_len, &mut tig, false);
+	current = succ[0];
+	visited.insert(current);
+    }
+    
+    let ret_tig = tig.iter().map(|x| *x).collect::<String>();
+
+    (ret_tig, cocktail::kmer::cannonical(begin, k), cocktail::kmer::cannonical(current, k))
+}
+
+
+fn add_kmer_in_tig(kmer: u64, k: u8, not_ovl_len: u8, tig: &mut std::collections::VecDeque<char>, in_front: bool) {
+    if in_front {
+	let seq = cocktail::kmer::kmer2seq(kmer, k);
+	for n in seq[..not_ovl_len as usize].chars().rev() {
+	    tig.push_front(n);
+	}
     } else {
-        '+'
+	let seq = cocktail::kmer::kmer2seq(kmer, k);
+	for n in seq[(k - not_ovl_len) as usize..].chars() {
+	    tig.push_back(n);
+	}
     }
-}
+} 
 
-pub fn invert_dir(direction: petgraph::Direction) -> petgraph::Direction {
-    match direction {
-        petgraph::Direction::Incoming => petgraph::Direction::Outgoing,
-        petgraph::Direction::Outgoing => petgraph::Direction::Incoming,
+pub fn create_link(tig: &usize, end: &u64, first_ends: &std::collections::HashMap<u64, Vec<usize>>, second_ends: &std::collections::HashMap<u64, Vec<usize>>, other_before: bool, paralelle_tig: &std::collections::HashSet<(usize, usize)>) -> Vec<(usize, char, usize, char)> {
+    let mut ret = Vec::new();
+    
+    if let Some(other_tigs) = first_ends.get(end) {
+	for other_tig in other_tigs {
+	    if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
+		continue;
+	    }
+
+	    if other_tig == tig {
+		continue;
+	    }
+	    
+	    if other_before {
+		ret.push((*other_tig, '+', *tig, '+'));
+	    } else {
+		ret.push((*tig, '-', *other_tig, '+'));
+	    }
+	}
     }
-}
+	
+    if let Some(other_tigs) = second_ends.get(end) {
+	for other_tig in other_tigs {
+	    if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
+		continue;
+	    }
+	    
+	    if other_tig == tig {
+		continue;
+	    }
 
-pub fn successors(
-    current: u64,
-    orientation: char,
-    graph: &petgraph::graphmap::DiGraphMap<u64, (u8, char, char)>,
-    direction: petgraph::Direction,
-) -> Vec<u64> {
-    graph
-        .neighbors_directed(current, direction)
-        .filter(|x| graph.edge_weight(current, *x).unwrap().1 == orientation)
-        .collect()
-}
-
-pub fn simple_path(
-    origin: u64,
-    orientation: char,
-    graph: &petgraph::graphmap::DiGraphMap<u64, (u8, char, char)>,
-    direction: petgraph::Direction,
-    visited: &mut Viewed,
-) -> Vec<(u64, char, u8)> {
-    let mut nodes = Vec::new();
-
-    let mut current = origin;
-    let mut ori = orientation;
-
-    let mut nexts: Vec<u64> = successors(current, ori, graph, direction);
-    let mut preds: Vec<u64> = successors(current, invert_ori(ori), graph, invert_dir(direction));
-
-    while nexts.len() == 1 && preds.len() == 1 {
-        let next = nexts[0];
-
-        if visited.contains(next) {
-            break;
-        }
-        visited.insert(next);
-
-        let edge = graph.edge_weight(current, next).unwrap();
-        ori = edge.2;
-        current = next;
-
-        nodes.push((current, ori, edge.0));
-
-        nexts = successors(current, ori, graph, direction);
-        preds = successors(current, invert_ori(ori), graph, invert_dir(direction));
+	    if other_before {
+		ret.push((*other_tig, '+', *tig, '-'));
+	    } else {
+		ret.push((*tig, '+', *other_tig, '+'));
+	    }
+	}
     }
 
-    nodes
+    ret
 }
 
-pub fn get_links(
-    tig_id: usize,
-    node: u64,
-    ori: char,
-    graph: &petgraph::graphmap::DiGraphMap<u64, (u8, char, char)>,
-    direction: petgraph::Direction,
-    ext2tig: &std::collections::HashMap<u64, usize>,
-    unitigs: &[(String, u64, u64)],
-) -> Vec<(usize, char, usize, char, u8)> {
-    let mut links: Vec<(usize, char, usize, char, u8)> = Vec::new();
+pub fn normalize_u64_2tuple(mut a: (u64, u64)) -> (u64, u64) {
+    if a.0 > a.1 { std::mem::swap(&mut a.0, &mut a.1); }    
 
-    for next in successors(node, ori, graph, direction) {
-        if let Some(next_id) = ext2tig.get(&next) {
-            if let Some((weight, _, _)) = graph.edge_weight(node, next) {
-                if let Some((_, next_b, next_e)) = unitigs.get(*next_id) {
-                    if *next_b == next {
-                        match direction {
-                            petgraph::Direction::Incoming => {
-                                links.push((tig_id, '-', *next_id, '+', *weight))
-                            }
-                            petgraph::Direction::Outgoing => {
-                                links.push((tig_id, '+', *next_id, '+', *weight))
-                            }
-                        }
-                    } else if *next_e == next {
-                        match direction {
-                            petgraph::Direction::Incoming => {
-                                links.push((*next_id, '+', tig_id, '+', *weight))
-                            }
-                            petgraph::Direction::Outgoing => {
-                                links.push((tig_id, '+', *next_id, '-', *weight))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    a
+}
 
-    links
+pub fn normalize_usize_2tuple(mut a: (usize, usize)) -> (usize, usize) {
+    if a.0 > a.1 { std::mem::swap(&mut a.0, &mut a.1); }
+
+    a
 }

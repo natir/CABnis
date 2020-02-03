@@ -51,6 +51,7 @@ use std::io::Write;
 /* crate use */
 use anyhow::{Context, Result};
 use structopt::StructOpt;
+use itertools::Itertools;
 
 /* local use */
 use error::Error;
@@ -110,267 +111,92 @@ fn main() -> Result<()> {
     };
 
     let solid = utils::Kmer::new(data, k, params.edge_threshold);
-    let mut graph: petgraph::graphmap::DiGraphMap<u64, (u8, char, char)> =
-        petgraph::graphmap::GraphMap::new();
+    let mut visited = utils::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
+    
+    let mut unitigs = Vec::new();
+    let mut ext2tig_beg = std::collections::HashMap::new();
+    let mut ext2tig_end = std::collections::HashMap::new();
+    let mut ends2tig = std::collections::HashMap::new();
 
-    info!("Begin of kmer graph building");
-    let mut kmer_writer =
-        std::io::BufWriter::new(std::fs::File::create(&params.kmer).with_context(|| {
-            Error::CantWriteFile {
-                filename: params.kmer.clone(),
-            }
-        })?);
-
-    writeln!(kmer_writer, "H\tVN:Z:1.0")?;
-    let mut kmer_set = std::collections::HashSet::new();
+    info!("Begin of unitig building");
     for kmer in 0..(cocktail::kmer::get_kmer_space_size(k) << 1) {
         if !solid.is_solid(kmer) {
             continue;
         }
 
-        let cano = cocktail::kmer::cannonical(kmer, k);
-
-        if let Some((preds, ovl_len)) = solid.predecessors(cano) {
-            for predecessor in preds {
-                let pred_sign = if cocktail::kmer::parity_even(predecessor) {
-                    ('+', '-')
-                } else {
-                    ('-', '+')
-                };
-
-                writeln!(
-                    kmer_writer,
-                    "L\t{}\t{}\t{}\t+\t{}M",
-                    cocktail::kmer::cannonical(predecessor, k),
-                    pred_sign.0,
-                    cano,
-                    k - ovl_len
-                )?;
-
-                graph.add_edge(
-                    cocktail::kmer::cannonical(predecessor, k),
-                    cano,
-                    (k - ovl_len, pred_sign.0, '+'),
-                );
-                graph.add_edge(
-                    cano,
-                    cocktail::kmer::cannonical(predecessor, k),
-                    (k - ovl_len, '-', pred_sign.1),
-                );
-
-                kmer_set.insert(cocktail::kmer::cannonical(predecessor, k));
-                kmer_set.insert(cano);
-            }
-        }
-
-        if let Some((succs, ovl_len)) = solid.successors(cano) {
-            for successor in succs {
-                let succ_sign = if cocktail::kmer::parity_even(successor) {
-                    ('+', '-')
-                } else {
-                    ('-', '+')
-                };
-
-                writeln!(
-                    kmer_writer,
-                    "L\t{}\t+\t{}\t{}\t{}M",
-                    cano,
-                    cocktail::kmer::cannonical(successor, k),
-                    succ_sign.0,
-                    k - ovl_len
-                )?;
-
-                graph.add_edge(
-                    cano,
-                    cocktail::kmer::cannonical(successor, k),
-                    (k - ovl_len, '+', succ_sign.0),
-                );
-                graph.add_edge(
-                    cocktail::kmer::cannonical(successor, k),
-                    cano,
-                    (k - ovl_len, succ_sign.1, '-'),
-                );
-
-                kmer_set.insert(cocktail::kmer::cannonical(successor, k));
-                kmer_set.insert(cano);
-            }
-        }
-    }
-
-    for kmer in kmer_set.iter() {
-        writeln!(
-            kmer_writer,
-            "S\t{}\t{}",
-            kmer,
-            cocktail::kmer::kmer2seq(*kmer, k)
-        )?;
-    }
-    info!("End of kmer graph building");
-
-    //println!("{:?}", petgraph::dot::Dot::new(&graph));
-
-    info!("Begin of unitig building");
-    let mut unitigs = Vec::new();
-    let mut visited = utils::Viewed::new(cocktail::kmer::get_kmer_space_size(k));
-    let mut ext2tig = std::collections::HashMap::new();
-
-    for origin in graph.nodes() {
-        //println!("node {}", node);
-        if visited.contains(origin) {
-            continue;
-        }
-
-        let mut unitig = cocktail::kmer::kmer2seq(origin, k);
-
-        let mut begin = origin;
-        let preds = utils::simple_path(
-            origin,
-            '+',
-            &graph,
-            petgraph::Direction::Incoming,
-            &mut visited,
-        );
-        for pred in preds {
-            let next = if pred.1 == '-' {
-                cocktail::kmer::kmer2seq(cocktail::kmer::revcomp(pred.0, k), k)
-            } else {
-                cocktail::kmer::kmer2seq(pred.0, k)
-            };
-
-            unitig += &next[pred.2 as usize..];
-            begin = pred.0;
-        }
-
-        let mut end = origin;
-        let succs = utils::simple_path(
-            origin,
-            '-',
-            &graph,
-            petgraph::Direction::Incoming,
-            &mut visited,
-        );
-        for succ in succs {
-            let next = if succ.1 == '+' {
-                cocktail::kmer::kmer2seq(cocktail::kmer::revcomp(succ.0, k), k)
-            } else {
-                cocktail::kmer::kmer2seq(succ.0, k)
-            };
-
-            unitig = vec![&next[..(k as usize - succ.2 as usize)], &unitig].join("");
-            end = succ.0;
-        }
-
-        ext2tig.insert(begin, unitigs.len());
-        ext2tig.insert(end, unitigs.len());
-
-        unitigs.push((unitig, end, begin));
+	if visited.contains(kmer) {
+	    continue;
+	}
+	
+	visited.insert(kmer);
+	let (tig, begin, end) = utils::build_tig(kmer, k, &solid, &mut visited);
+	
+	ext2tig_beg.entry(begin).or_insert(Vec::new()).push(unitigs.len());
+	ext2tig_end.entry(end).or_insert(Vec::new()).push(unitigs.len());
+	ends2tig.entry(utils::normalize_u64_2tuple((begin, end))).or_insert(Vec::new()).push(unitigs.len());
+	unitigs.push(tig);
     }
     info!("End of unitig building");
 
-    info!("Begin of write unitig");
-    let mut fasta_writer =
-        std::io::BufWriter::new(std::fs::File::create(&params.fasta).with_context(|| {
+    info!("Begin of unitig writting");
+    let mut unitigs_writer =
+        std::io::BufWriter::new(std::fs::File::create(&params.unitigs).with_context(|| {
             Error::CantWriteFile {
-                filename: params.fasta.clone(),
+                filename: params.unitigs.clone(),
             }
         })?);
 
-    for (i, (unitig, begin, end)) in unitigs.iter().enumerate() {
-        writeln!(
-            fasta_writer,
-            ">{} begin:{} end:{} len:{}\n{}",
-            i,
-            begin,
-            end,
-            unitig.len(),
-            unitig
-        )?;
+    for (i, unitig) in unitigs.iter().enumerate() {
+	writeln!(unitigs_writer, ">{}\tln:i:{}\n{}", i, unitig.len(), unitig)?;
     }
-    info!("End of write unitig");
+    info!("End of unitig writting");
 
-    info!("Begin of unitig graph writing");
+    for (ext, tig) in ext2tig_beg.iter() {
+	warn!("ext {:?} tig {:?}", cocktail::kmer::kmer2seq(*ext, k), tig);
+    }
+    for (ext, tig) in ext2tig_end.iter() {
+	warn!("ext {:?} tig {:?}", cocktail::kmer::kmer2seq(*ext, k), tig);
+    }
+    
+    info!("Begin of unitig graph writting");
     let mut graph_writer =
-        std::io::BufWriter::new(std::fs::File::create(&params.gfa).with_context(|| {
+        std::io::BufWriter::new(std::fs::File::create(&params.graph).with_context(|| {
             Error::CantWriteFile {
-                filename: params.gfa.clone(),
+                filename: params.graph.clone(),
             }
         })?);
 
-    for (i, (unitig, begin, end)) in unitigs.iter().enumerate() {
-        writeln!(
-            graph_writer,
-            "S\t{}\t{}\tbe:Z:{}\ten:Z:{}",
-            i, unitig, begin, end
-        )?;
+
+    let mut paralelle_tig = std::collections::HashSet::new();
+    for tigs in ends2tig.values() {
+	if tigs.len() > 1 {
+	    for tigs2 in tigs.iter().combinations(2) {
+		paralelle_tig.insert(utils::normalize_usize_2tuple((*tigs2[0], *tigs2[1])));
+	    }	
+	} 
+    }
+	
+    writeln!(graph_writer, "H\tVN:Z:1.0")?;
+    for (i, tig) in unitigs.iter().enumerate() {
+	writeln!(graph_writer,"S\t{}\t{}", i, tig)?;
+    }
+    
+    for (begin, tigs) in ext2tig_beg.iter() {
+	for tig in tigs {
+	    for link in utils::create_link(tig, begin, &ext2tig_end, &ext2tig_beg, true, &paralelle_tig) {
+		writeln!(graph_writer, "L\t{}\t{}\t{}\t{}\t14M", link.0, link.1, link.2, link.3)?;
+	    }
+	}
     }
 
-    for (i, (_, begin, end)) in unitigs.iter().enumerate() {
-        for (source, s_ori, target, t_ori, weight) in utils::get_links(
-            i,
-            *begin,
-            '+',
-            &graph,
-            petgraph::Direction::Incoming,
-            &ext2tig,
-            &unitigs,
-        ) {
-            writeln!(
-                graph_writer,
-                "L\t{}\t{}\t{}\t{}\t{}M",
-                source, s_ori, target, t_ori, weight
-            )?;
-        }
-
-        for (source, s_ori, target, t_ori, weight) in utils::get_links(
-            i,
-            *begin,
-            '-',
-            &graph,
-            petgraph::Direction::Incoming,
-            &ext2tig,
-            &unitigs,
-        ) {
-            writeln!(
-                graph_writer,
-                "L\t{}\t{}\t{}\t{}\t{}M",
-                source, s_ori, target, t_ori, weight
-            )?;
-        }
-
-        for (source, s_ori, target, t_ori, weight) in utils::get_links(
-            i,
-            *end,
-            '+',
-            &graph,
-            petgraph::Direction::Outgoing,
-            &ext2tig,
-            &unitigs,
-        ) {
-            writeln!(
-                graph_writer,
-                "L\t{}\t{}\t{}\t{}\t{}M",
-                source, s_ori, target, t_ori, weight
-            )?;
-        }
-
-        for (source, s_ori, target, t_ori, weight) in utils::get_links(
-            i,
-            *end,
-            '-',
-            &graph,
-            petgraph::Direction::Outgoing,
-            &ext2tig,
-            &unitigs,
-        ) {
-            writeln!(
-                graph_writer,
-                "L\t{}\t{}\t{}\t{}\t{}M",
-                source, s_ori, target, t_ori, weight
-            )?;
-        }
+    for (end, tigs) in ext2tig_end.iter() {
+	for tig in tigs { 
+	    for link in utils::create_link(tig, end, &ext2tig_end, &ext2tig_beg, false, &paralelle_tig) {
+		writeln!(graph_writer, "L\t{}\t{}\t{}\t{}\t14M", link.0, link.1, link.2, link.3)?;
+	    }
+	}
     }
-
-    info!("End of unitig graph writing");
-
+    info!("End of unitig graph writting");
+    
     Ok(())
 }

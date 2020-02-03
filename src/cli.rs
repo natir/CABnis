@@ -33,27 +33,19 @@ use structopt::StructOpt;
 pub struct Command {
     #[structopt(
         short = "g",
-        long = "gfa",
+        long = "graph",
         required = true,
         help = "path of gfa output file"
     )]
-    pub gfa: String,
+    pub graph: String,
 
     #[structopt(
-        short = "f",
-        long = "fasta",
+        short = "u",
+        long = "unitigs",
         required = true,
         help = "path of fasta output file"
     )]
-    pub fasta: String,
-
-    #[structopt(
-        short = "k",
-        long = "kmer",
-        required = true,
-        help = "path of kmer graph output file"
-    )]
-    pub kmer: String,
+    pub unitigs: String,
 
     #[structopt(
         short = "t",
