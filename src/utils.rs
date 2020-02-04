@@ -95,7 +95,7 @@ impl Kmer {
 
         None
     }
-    
+
     pub fn predecessors(&self, kmer: u64) -> Option<(Vec<u64>, u8)> {
         for deep in 0..self.max_deep {
             let suffix = kmer >> (2 * (deep + 1));
@@ -134,149 +134,172 @@ impl Viewed {
     pub fn new(len: u64, k: u8) -> Self {
         Viewed {
             bitvec: bv::BitVec::new_fill(false, len),
-	    k
+            k,
         }
     }
 
     pub fn contains(&self, kmer: u64) -> bool {
-        self.bitvec.get(cocktail::kmer::remove_first_bit(cocktail::kmer::cannonical(kmer, self.k)))
+        self.bitvec.get(cocktail::kmer::remove_first_bit(
+            cocktail::kmer::cannonical(kmer, self.k),
+        ))
     }
 
     pub fn insert(&mut self, kmer: u64) {
-        self.bitvec
-            .set(cocktail::kmer::remove_first_bit(cocktail::kmer::cannonical(kmer, self.k)), true);
+        self.bitvec.set(
+            cocktail::kmer::remove_first_bit(cocktail::kmer::cannonical(kmer, self.k)),
+            true,
+        );
     }
 }
 
-pub fn build_tig(kmer: u64, k: u8, solid: &Kmer, visited: &mut Viewed) -> (String, u64, u64) {
+pub fn build_tig(
+    kmer: u64,
+    k: u8,
+    solid: &Kmer,
+    visited: &mut Viewed,
+) -> Option<(String, u64, u64)> {
     let mut tig = std::collections::VecDeque::new();
-    
+
     let mut current = kmer;
     for n in cocktail::kmer::kmer2seq(current, k).chars() {
-	tig.push_back(n);
+        tig.push_back(n);
     }
 
+    /* if a unitig with size equal to k and nb_pred < 2 || nb_succ < 2 it's not a valid unitig */
+    let mut nb_pred = 0;
+    let mut nb_succ = 0;
+
     while let Some((pred, ovl_len)) = solid.predecessors(current) {
-	if pred.len() != 1 {
-	    warn!("prev break on {:?} because multi pred", cocktail::kmer::kmer2seq(current, k));
-	    for n in pred {
-		warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
-	    }
-	    break;
-	}
+        nb_pred = pred.len();
+        if pred.len() != 1 {
+            break;
+        }
 
-	if let Some((succ, _)) = solid.successors(current) {
-	    if succ.len() != 1 {
-		warn!("prev break on {:?} because multi succ", cocktail::kmer::kmer2seq(current, k));
-		for n in succ {
-		    warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
-		}
-		break;
-	    }
-	}
+        if let Some((succ, _)) = solid.successors(current) {
+            if succ.len() != 1 {
+                break;
+            }
+        }
 
-	add_kmer_in_tig(pred[0], k, ovl_len, &mut tig, true);
-	current = pred[0];
-	visited.insert(current);
+        add_kmer_in_tig(pred[0], k, ovl_len, &mut tig, true);
+        current = pred[0];
+        visited.insert(current);
     }
     let begin = current;
 
     current = kmer;
-    
+
     while let Some((succ, ovl_len)) = solid.successors(current) {
-	if succ.len() != 1 {
-	    warn!("succ break on {:?} because multi succ ", cocktail::kmer::kmer2seq(current, k));
-	    for n in succ {
-		warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
-	    }
-	    break;
-	}
+        nb_succ = succ.len();
+        if succ.len() != 1 {
+            break;
+        }
 
-	if let Some((pred, _)) = solid.predecessors(current) {
-	    if pred.len() != 1 {
-		warn!("succ break on {:?} because multi pred", cocktail::kmer::kmer2seq(current, k));
-		for n in pred {
-		    warn!("{:?}", cocktail::kmer::kmer2seq(n, k));
-		}
-		break;
-	    }
-	}
+        if let Some((pred, _)) = solid.predecessors(current) {
+            if pred.len() != 1 {
+                break;
+            }
+        }
 
-	add_kmer_in_tig(succ[0], k, ovl_len, &mut tig, false);
-	current = succ[0];
-	visited.insert(current);
+        add_kmer_in_tig(succ[0], k, ovl_len, &mut tig, false);
+        current = succ[0];
+        visited.insert(current);
     }
-    
+
+    if current == begin && (nb_pred < 2 || nb_succ < 2) {
+        return None;
+    }
+
     let ret_tig = tig.iter().map(|x| *x).collect::<String>();
 
-    (ret_tig, cocktail::kmer::cannonical(begin, k), cocktail::kmer::cannonical(current, k))
+    Some((
+        ret_tig,
+        cocktail::kmer::cannonical(begin, k),
+        cocktail::kmer::cannonical(current, k),
+    ))
 }
 
-
-fn add_kmer_in_tig(kmer: u64, k: u8, not_ovl_len: u8, tig: &mut std::collections::VecDeque<char>, in_front: bool) {
+fn add_kmer_in_tig(
+    kmer: u64,
+    k: u8,
+    not_ovl_len: u8,
+    tig: &mut std::collections::VecDeque<char>,
+    in_front: bool,
+) {
     if in_front {
-	let seq = cocktail::kmer::kmer2seq(kmer, k);
-	for n in seq[..not_ovl_len as usize].chars().rev() {
-	    tig.push_front(n);
-	}
+        let seq = cocktail::kmer::kmer2seq(kmer, k);
+        for n in seq[..not_ovl_len as usize].chars().rev() {
+            tig.push_front(n);
+        }
     } else {
-	let seq = cocktail::kmer::kmer2seq(kmer, k);
-	for n in seq[(k - not_ovl_len) as usize..].chars() {
-	    tig.push_back(n);
-	}
+        let seq = cocktail::kmer::kmer2seq(kmer, k);
+        for n in seq[(k - not_ovl_len) as usize..].chars() {
+            tig.push_back(n);
+        }
     }
-} 
+}
 
-pub fn create_link(tig: &usize, end: &u64, first_ends: &std::collections::HashMap<u64, Vec<usize>>, second_ends: &std::collections::HashMap<u64, Vec<usize>>, other_before: bool, paralelle_tig: &std::collections::HashSet<(usize, usize)>) -> Vec<(usize, char, usize, char)> {
+pub fn create_link(
+    tig: &usize,
+    end: &u64,
+    first_ends: &std::collections::HashMap<u64, Vec<usize>>,
+    second_ends: &std::collections::HashMap<u64, Vec<usize>>,
+    other_before: bool,
+    paralelle_tig: &std::collections::HashSet<(usize, usize)>,
+) -> Vec<(usize, char, usize, char)> {
     let mut ret = Vec::new();
-    
+
     if let Some(other_tigs) = first_ends.get(end) {
-	for other_tig in other_tigs {
-	    if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
-		continue;
-	    }
+        for other_tig in other_tigs {
+            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
+                continue;
+            }
 
-	    if other_tig == tig {
-		continue;
-	    }
-	    
-	    if other_before {
-		ret.push((*other_tig, '+', *tig, '+'));
-	    } else {
-		ret.push((*tig, '-', *other_tig, '+'));
-	    }
-	}
+            if other_tig == tig {
+                continue;
+            }
+
+            if other_before {
+                ret.push((*other_tig, '+', *tig, '+'));
+            } else {
+                ret.push((*tig, '-', *other_tig, '+'));
+            }
+        }
     }
-	
-    if let Some(other_tigs) = second_ends.get(end) {
-	for other_tig in other_tigs {
-	    if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
-		continue;
-	    }
-	    
-	    if other_tig == tig {
-		continue;
-	    }
 
-	    if other_before {
-		ret.push((*other_tig, '+', *tig, '-'));
-	    } else {
-		ret.push((*tig, '+', *other_tig, '+'));
-	    }
-	}
+    if let Some(other_tigs) = second_ends.get(end) {
+        for other_tig in other_tigs {
+            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
+                continue;
+            }
+
+            if other_tig == tig {
+                continue;
+            }
+
+            if other_before {
+                ret.push((*other_tig, '+', *tig, '-'));
+            } else {
+                ret.push((*tig, '+', *other_tig, '+'));
+            }
+        }
     }
 
     ret
 }
 
 pub fn normalize_u64_2tuple(mut a: (u64, u64)) -> (u64, u64) {
-    if a.0 > a.1 { std::mem::swap(&mut a.0, &mut a.1); }    
+    if a.0 > a.1 {
+        std::mem::swap(&mut a.0, &mut a.1);
+    }
 
     a
 }
 
 pub fn normalize_usize_2tuple(mut a: (usize, usize)) -> (usize, usize) {
-    if a.0 > a.1 { std::mem::swap(&mut a.0, &mut a.1); }
+    if a.0 > a.1 {
+        std::mem::swap(&mut a.0, &mut a.1);
+    }
 
     a
 }

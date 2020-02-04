@@ -50,8 +50,8 @@ use std::io::Write;
 
 /* crate use */
 use anyhow::{Context, Result};
-use structopt::StructOpt;
 use itertools::Itertools;
+use structopt::StructOpt;
 
 /* local use */
 use error::Error;
@@ -112,7 +112,7 @@ fn main() -> Result<()> {
 
     let solid = utils::Kmer::new(data, k, params.edge_threshold);
     let mut visited = utils::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
-    
+
     let mut unitigs = Vec::new();
     let mut ext2tig_beg = std::collections::HashMap::new();
     let mut ext2tig_end = std::collections::HashMap::new();
@@ -124,17 +124,28 @@ fn main() -> Result<()> {
             continue;
         }
 
-	if visited.contains(kmer) {
-	    continue;
-	}
-	
-	visited.insert(kmer);
-	let (tig, begin, end) = utils::build_tig(kmer, k, &solid, &mut visited);
-	
-	ext2tig_beg.entry(begin).or_insert(Vec::new()).push(unitigs.len());
-	ext2tig_end.entry(end).or_insert(Vec::new()).push(unitigs.len());
-	ends2tig.entry(utils::normalize_u64_2tuple((begin, end))).or_insert(Vec::new()).push(unitigs.len());
-	unitigs.push(tig);
+        if visited.contains(kmer) {
+            continue;
+        }
+
+        visited.insert(kmer);
+        if let Some((tig, begin, end)) = utils::build_tig(kmer, k, &solid, &mut visited) {
+            ext2tig_beg
+                .entry(begin)
+                .or_insert(Vec::new())
+                .push(unitigs.len());
+            ext2tig_end
+                .entry(end)
+                .or_insert(Vec::new())
+                .push(unitigs.len());
+            ends2tig
+                .entry(utils::normalize_u64_2tuple((begin, end)))
+                .or_insert(Vec::new())
+                .push(unitigs.len());
+            unitigs.push(tig);
+        } else {
+            continue;
+        }
     }
     info!("End of unitig building");
 
@@ -147,17 +158,10 @@ fn main() -> Result<()> {
         })?);
 
     for (i, unitig) in unitigs.iter().enumerate() {
-	writeln!(unitigs_writer, ">{}\tln:i:{}\n{}", i, unitig.len(), unitig)?;
+        writeln!(unitigs_writer, ">{}\tln:i:{}\n{}", i, unitig.len(), unitig)?;
     }
     info!("End of unitig writting");
 
-    for (ext, tig) in ext2tig_beg.iter() {
-	warn!("ext {:?} tig {:?}", cocktail::kmer::kmer2seq(*ext, k), tig);
-    }
-    for (ext, tig) in ext2tig_end.iter() {
-	warn!("ext {:?} tig {:?}", cocktail::kmer::kmer2seq(*ext, k), tig);
-    }
-    
     info!("Begin of unitig graph writting");
     let mut graph_writer =
         std::io::BufWriter::new(std::fs::File::create(&params.graph).with_context(|| {
@@ -166,37 +170,48 @@ fn main() -> Result<()> {
             }
         })?);
 
-
     let mut paralelle_tig = std::collections::HashSet::new();
     for tigs in ends2tig.values() {
-	if tigs.len() > 1 {
-	    for tigs2 in tigs.iter().combinations(2) {
-		paralelle_tig.insert(utils::normalize_usize_2tuple((*tigs2[0], *tigs2[1])));
-	    }	
-	} 
+        if tigs.len() > 1 {
+            for tigs2 in tigs.iter().combinations(2) {
+                paralelle_tig.insert(utils::normalize_usize_2tuple((*tigs2[0], *tigs2[1])));
+            }
+        }
     }
-	
+
     writeln!(graph_writer, "H\tVN:Z:1.0")?;
     for (i, tig) in unitigs.iter().enumerate() {
-	writeln!(graph_writer,"S\t{}\t{}", i, tig)?;
+        writeln!(graph_writer, "S\t{}\t{}", i, tig)?;
     }
-    
+
     for (begin, tigs) in ext2tig_beg.iter() {
-	for tig in tigs {
-	    for link in utils::create_link(tig, begin, &ext2tig_end, &ext2tig_beg, true, &paralelle_tig) {
-		writeln!(graph_writer, "L\t{}\t{}\t{}\t{}\t14M", link.0, link.1, link.2, link.3)?;
-	    }
-	}
+        for tig in tigs {
+            for link in
+                utils::create_link(tig, begin, &ext2tig_end, &ext2tig_beg, true, &paralelle_tig)
+            {
+                writeln!(
+                    graph_writer,
+                    "L\t{}\t{}\t{}\t{}\t14M",
+                    link.0, link.1, link.2, link.3
+                )?;
+            }
+        }
     }
 
     for (end, tigs) in ext2tig_end.iter() {
-	for tig in tigs { 
-	    for link in utils::create_link(tig, end, &ext2tig_end, &ext2tig_beg, false, &paralelle_tig) {
-		writeln!(graph_writer, "L\t{}\t{}\t{}\t{}\t14M", link.0, link.1, link.2, link.3)?;
-	    }
-	}
+        for tig in tigs {
+            for link in
+                utils::create_link(tig, end, &ext2tig_end, &ext2tig_beg, false, &paralelle_tig)
+            {
+                writeln!(
+                    graph_writer,
+                    "L\t{}\t{}\t{}\t{}\t14M",
+                    link.0, link.1, link.2, link.3
+                )?;
+            }
+        }
     }
     info!("End of unitig graph writting");
-    
+
     Ok(())
 }
