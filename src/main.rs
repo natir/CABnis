@@ -67,12 +67,19 @@ fn main() -> Result<()> {
     let solid = graph::Graph::new(data, k, params.edge_threshold);
     let mut visited = graph::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
 
-    let mut unitigs = Vec::new();
+    let mut unitigs_cpt = 0;
     let mut ext2tig_beg = std::collections::HashMap::new();
     let mut ext2tig_end = std::collections::HashMap::new();
     let mut ends2tig = std::collections::HashMap::new();
 
     info!("Begin of unitig building");
+    let mut unitigs_writer =
+        std::io::BufWriter::new(std::fs::File::create(&params.unitigs).with_context(|| {
+            Error::CantWriteFile {
+                filename: params.unitigs.clone(),
+            }
+        })?);
+
     for kmer in 0..(cocktail::kmer::get_kmer_space_size(k) << 1) {
         if !solid.is_solid(kmer) {
             continue;
@@ -87,34 +94,22 @@ fn main() -> Result<()> {
             ext2tig_beg
                 .entry(begin)
                 .or_insert_with(Vec::new)
-                .push(unitigs.len());
+                .push(unitigs_cpt);
             ext2tig_end
                 .entry(end)
                 .or_insert_with(Vec::new)
-                .push(unitigs.len());
+                .push(unitigs_cpt);
             ends2tig
                 .entry(utils::normalize_u64_2tuple((begin, end)))
                 .or_insert_with(Vec::new)
-                .push(unitigs.len());
-            unitigs.push(tig);
+                .push(unitigs_cpt);
+	    unitigs_cpt += 1;
+            writeln!(unitigs_writer, ">{}\tln:i:{}\n{}", unitigs_cpt, tig.len(), tig)?;
         } else {
             continue;
         }
     }
     info!("End of unitig building");
-
-    info!("Begin of unitig writting");
-    let mut unitigs_writer =
-        std::io::BufWriter::new(std::fs::File::create(&params.unitigs).with_context(|| {
-            Error::CantWriteFile {
-                filename: params.unitigs.clone(),
-            }
-        })?);
-
-    for (i, unitig) in unitigs.iter().enumerate() {
-        writeln!(unitigs_writer, ">{}\tln:i:{}\n{}", i, unitig.len(), unitig)?;
-    }
-    info!("End of unitig writting");
 
     info!("Begin of unitig graph writting");
     let mut graph_writer =
@@ -134,8 +129,8 @@ fn main() -> Result<()> {
     }
 
     writeln!(graph_writer, "H\tVN:Z:1.0")?;
-    for (i, tig) in unitigs.iter().enumerate() {
-        writeln!(graph_writer, "S\t{}\t{}", i, tig)?;
+    for i in 0..unitigs_cpt {
+        writeln!(graph_writer, "S\t{}\t*", i)?;
     }
 
     for (begin, tigs) in ext2tig_beg.iter() {
