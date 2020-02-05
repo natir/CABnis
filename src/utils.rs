@@ -20,143 +20,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
-use itertools::Itertools;
+/* crate use */
+use anyhow::{Context, Result};
+use niffler;
 
-fn build_kmermasks(deep: u8, k: u8) -> Vec<u64> {
-    let mut kmermasks = Vec::new();
-
-    let mut mask = (1 << (k as u64 * 2)) - 1;
-
-    for _ in 0..(deep) {
-        mask >>= 2;
-        kmermasks.push(mask)
-    }
-
-    kmermasks
-}
-
-fn build_subkmer(deep: u8) -> Vec<Vec<u64>> {
-    let mut kseq = Vec::new();
-
-    let nucs = "ACTG";
-    for i in 0..deep {
-        let length = i + 1;
-        kseq.push(Vec::new());
-        for multi_nucs in (0..length).map(|_| nucs.bytes()).multi_cartesian_product() {
-            kseq[i as usize].push(cocktail::kmer::seq2bit(multi_nucs.into_iter().as_slice()));
-        }
-    }
-
-    kseq
-}
-
-pub struct Kmer {
-    solidity: bv::BitVec<u8>,
-    kmermasks: Vec<u64>,
-    subkmer: Vec<Vec<u64>>,
-    max_deep: u8,
-    k: u8,
-}
-
-impl Kmer {
-    pub fn new(solidity: bv::BitVec<u8>, k: u8, max_deep: u8) -> Self {
-        Kmer {
-            solidity,
-            kmermasks: build_kmermasks(max_deep, k),
-            subkmer: build_subkmer(max_deep),
-            max_deep,
-            k,
-        }
-    }
-
-    pub fn is_solid(&self, kmer: u64) -> bool {
-        self.solidity.get(cocktail::kmer::remove_first_bit(
-            cocktail::kmer::cannonical(kmer, self.k),
-        ))
-    }
-
-    pub fn successors(&self, kmer: u64) -> Option<(Vec<u64>, u8)> {
-        for deep in 0..self.max_deep {
-            let prefix = (kmer & self.kmermasks[deep as usize]) << (2 * (deep + 1));
-
-            let mut exist_kmer = Vec::new();
-
-            for suffix in self.subkmer[deep as usize].iter() {
-                let next_kmer = prefix ^ suffix;
-                if self.is_solid(next_kmer) {
-                    exist_kmer.push(next_kmer);
-                }
-            }
-
-            if !exist_kmer.is_empty() {
-                return Some((exist_kmer, deep + 1));
-            }
-        }
-
-        None
-    }
-
-    pub fn predecessors(&self, kmer: u64) -> Option<(Vec<u64>, u8)> {
-        for deep in 0..self.max_deep {
-            let suffix = kmer >> (2 * (deep + 1));
-
-            let mut exist_kmer = Vec::new();
-
-            for prefix in self.subkmer[deep as usize]
-                .iter()
-                .map(|x| x << (2 * (self.k - (deep + 1))))
-            {
-                let next_kmer = prefix ^ suffix;
-                if next_kmer == kmer {
-                    continue;
-                }
-
-                if self.is_solid(next_kmer) {
-                    exist_kmer.push(next_kmer);
-                }
-            }
-
-            if !exist_kmer.is_empty() {
-                return Some((exist_kmer, deep + 1));
-            }
-        }
-
-        None
-    }
-}
-
-pub struct Viewed {
-    bitvec: bv::BitVec<u8>,
-    k: u8,
-}
-
-impl Viewed {
-    pub fn new(len: u64, k: u8) -> Self {
-        Viewed {
-            bitvec: bv::BitVec::new_fill(false, len),
-            k,
-        }
-    }
-
-    pub fn contains(&self, kmer: u64) -> bool {
-        self.bitvec.get(cocktail::kmer::remove_first_bit(
-            cocktail::kmer::cannonical(kmer, self.k),
-        ))
-    }
-
-    pub fn insert(&mut self, kmer: u64) {
-        self.bitvec.set(
-            cocktail::kmer::remove_first_bit(cocktail::kmer::cannonical(kmer, self.k)),
-            true,
-        );
-    }
-}
+/* local mod */
+use crate::cli;
+use crate::error::Error;
+use crate::graph;
 
 pub fn build_tig(
     kmer: u64,
     k: u8,
-    solid: &Kmer,
-    visited: &mut Viewed,
+    solid: &graph::Graph,
+    visited: &mut graph::Viewed,
 ) -> Option<(String, u64, u64)> {
     let mut tig = std::collections::VecDeque::new();
 
@@ -210,7 +87,7 @@ pub fn build_tig(
         return None;
     }
 
-    let ret_tig = tig.iter().map(|x| *x).collect::<String>();
+    let ret_tig = tig.iter().copied().collect::<String>();
 
     Some((
         ret_tig,
@@ -240,8 +117,8 @@ fn add_kmer_in_tig(
 }
 
 pub fn create_link(
-    tig: &usize,
-    end: &u64,
+    tig: usize,
+    end: u64,
     first_ends: &std::collections::HashMap<u64, Vec<usize>>,
     second_ends: &std::collections::HashMap<u64, Vec<usize>>,
     other_before: bool,
@@ -249,38 +126,38 @@ pub fn create_link(
 ) -> Vec<(usize, char, usize, char)> {
     let mut ret = Vec::new();
 
-    if let Some(other_tigs) = first_ends.get(end) {
+    if let Some(other_tigs) = first_ends.get(&end) {
         for other_tig in other_tigs {
-            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
+            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, tig))) {
                 continue;
             }
 
-            if other_tig == tig {
+            if other_tig == &tig {
                 continue;
             }
 
             if other_before {
-                ret.push((*other_tig, '+', *tig, '+'));
+                ret.push((*other_tig, '+', tig, '+'));
             } else {
-                ret.push((*tig, '-', *other_tig, '+'));
+                ret.push((tig, '-', *other_tig, '+'));
             }
         }
     }
 
-    if let Some(other_tigs) = second_ends.get(end) {
+    if let Some(other_tigs) = second_ends.get(&end) {
         for other_tig in other_tigs {
-            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, *tig))) {
+            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, tig))) {
                 continue;
             }
 
-            if other_tig == tig {
+            if other_tig == &tig {
                 continue;
             }
 
             if other_before {
-                ret.push((*other_tig, '+', *tig, '-'));
+                ret.push((*other_tig, '+', tig, '-'));
             } else {
-                ret.push((*tig, '+', *other_tig, '+'));
+                ret.push((tig, '+', *other_tig, '+'));
             }
         }
     }
@@ -302,4 +179,55 @@ pub fn normalize_usize_2tuple(mut a: (usize, usize)) -> (usize, usize) {
     }
 
     a
+}
+
+pub fn get_count(params: &cli::Command) -> Result<(u8, bv::BitVec<u8>)> {
+    match &params.subcmd {
+        cli::SubCommand::Count(subcmd_params) => {
+            info!("Begin of read solidity information");
+
+            let (k, data) = cocktail::io::read_solidity_bitfield(
+                std::io::BufReader::new(std::fs::File::open(&subcmd_params.input).with_context(
+                    || Error::CantReadFile {
+                        filename: subcmd_params.input.clone(),
+                    },
+                )?),
+                std::fs::metadata(&subcmd_params.input).unwrap().len(),
+            );
+
+            info!("End of read solidity information");
+
+            Ok((k, data))
+        }
+        cli::SubCommand::Reads(subcmd_params) => {
+            info!("Begin of kmer counting");
+
+            let mut count = pcon::count::Count::new(subcmd_params.kmer_size, 8);
+
+            let (reader, _) = niffler::get_reader(Box::new(std::io::BufReader::new(
+                std::fs::File::open(&subcmd_params.input).with_context(|| Error::CantReadFile {
+                    filename: subcmd_params.input.clone(),
+                })?,
+            )))?;
+
+            let fasta_reader = bio::io::fasta::Reader::new(reader);
+
+            for record in fasta_reader.records() {
+                let result = record.with_context(|| Error::ReadingError {
+                    filename: subcmd_params.input.clone(),
+                })?;
+
+                count.add_sequence(result.seq());
+            }
+
+            count.clean_buckets();
+
+            info!("End of kmer counting");
+
+            Ok((
+                subcmd_params.kmer_size,
+                count.generate_bitfield(subcmd_params.abundance_min),
+            ))
+        }
+    }
 }

@@ -43,6 +43,7 @@ extern crate petgraph;
 /* local mod */
 mod cli;
 mod error;
+mod graph;
 mod utils;
 
 /* std use */
@@ -61,57 +62,10 @@ fn main() -> Result<()> {
 
     let params = cli::Command::from_args();
 
-    let (k, data) = match &params.subcmd {
-        cli::SubCommand::Count(subcmd_params) => {
-            info!("Begin of read solidity information");
+    let (k, data) = utils::get_count(&params)?;
 
-            let (k, data) = cocktail::io::read_solidity_bitfield(
-                std::io::BufReader::new(std::fs::File::open(&subcmd_params.input).with_context(
-                    || Error::CantReadFile {
-                        filename: subcmd_params.input.clone(),
-                    },
-                )?),
-                std::fs::metadata(&subcmd_params.input).unwrap().len(),
-            );
-
-            info!("End of read solidity information");
-
-            (k, data)
-        }
-        cli::SubCommand::Reads(subcmd_params) => {
-            info!("Begin of kmer counting");
-
-            let mut count = pcon::count::Count::new(subcmd_params.kmer_size, 8);
-
-            let (reader, _) = niffler::get_reader(Box::new(std::io::BufReader::new(
-                std::fs::File::open(&subcmd_params.input).with_context(|| Error::CantReadFile {
-                    filename: subcmd_params.input.clone(),
-                })?,
-            )))?;
-
-            let fasta_reader = bio::io::fasta::Reader::new(reader);
-
-            for record in fasta_reader.records() {
-                let result = record.with_context(|| Error::ReadingError {
-                    filename: subcmd_params.input.clone(),
-                })?;
-
-                count.add_sequence(result.seq());
-            }
-
-            count.clean_buckets();
-
-            info!("End of kmer counting");
-
-            (
-                subcmd_params.kmer_size,
-                count.generate_bitfield(subcmd_params.abundance_min),
-            )
-        }
-    };
-
-    let solid = utils::Kmer::new(data, k, params.edge_threshold);
-    let mut visited = utils::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
+    let solid = graph::Graph::new(data, k, params.edge_threshold);
+    let mut visited = graph::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
 
     let mut unitigs = Vec::new();
     let mut ext2tig_beg = std::collections::HashMap::new();
@@ -132,15 +86,15 @@ fn main() -> Result<()> {
         if let Some((tig, begin, end)) = utils::build_tig(kmer, k, &solid, &mut visited) {
             ext2tig_beg
                 .entry(begin)
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .push(unitigs.len());
             ext2tig_end
                 .entry(end)
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .push(unitigs.len());
             ends2tig
                 .entry(utils::normalize_u64_2tuple((begin, end)))
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .push(unitigs.len());
             unitigs.push(tig);
         } else {
@@ -187,7 +141,7 @@ fn main() -> Result<()> {
     for (begin, tigs) in ext2tig_beg.iter() {
         for tig in tigs {
             for link in
-                utils::create_link(tig, begin, &ext2tig_end, &ext2tig_beg, true, &paralelle_tig)
+                utils::create_link(*tig, *begin, &ext2tig_end, &ext2tig_beg, true, &paralelle_tig)
             {
                 writeln!(
                     graph_writer,
@@ -201,7 +155,7 @@ fn main() -> Result<()> {
     for (end, tigs) in ext2tig_end.iter() {
         for tig in tigs {
             for link in
-                utils::create_link(tig, end, &ext2tig_end, &ext2tig_beg, false, &paralelle_tig)
+                utils::create_link(*tig, *end, &ext2tig_end, &ext2tig_beg, false, &paralelle_tig)
             {
                 writeln!(
                     graph_writer,
