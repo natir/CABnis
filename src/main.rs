@@ -80,7 +80,7 @@ fn main() -> Result<()> {
             }
         })?);
 
-    for kmer in 0..(cocktail::kmer::get_kmer_space_size(k) << 1) {
+    for kmer in 0..cocktail::kmer::get_kmer_space_size(k) {
         if !solid.is_solid(kmer) {
             continue;
         }
@@ -127,12 +127,14 @@ fn main() -> Result<()> {
             }
         }
     }
-
+    
+    info!("\twriting of S {} records", unitigs_cpt);
     writeln!(graph_writer, "H\tVN:Z:1.0")?;
     for i in 0..unitigs_cpt {
         writeln!(graph_writer, "S\t{}\t*", i)?;
     }
-
+    
+    info!("\twriting of L record");
     for (begin, tigs) in ext2tig_beg.iter() {
         for tig in tigs {
             for link in
