@@ -21,6 +21,7 @@ SOFTWARE.
  */
 
 /* crate use */
+use anyhow::Result;
 use itertools::Itertools;
 
 fn build_kmermasks(deep: u8, k: u8) -> Vec<u64> {
@@ -84,6 +85,10 @@ impl Graph {
 
             for suffix in self.subkmer[deep as usize].iter() {
                 let next_kmer = prefix ^ suffix;
+                if next_kmer == kmer || cocktail::kmer::revcomp(next_kmer, self.k) == kmer {
+                    continue;
+                }
+
                 if self.is_solid(next_kmer) {
                     exist_kmer.push(next_kmer);
                 }
@@ -108,7 +113,7 @@ impl Graph {
                 .map(|x| x << (2 * (self.k - (deep + 1))))
             {
                 let next_kmer = prefix ^ suffix;
-                if next_kmer == kmer {
+                if next_kmer == kmer || cocktail::kmer::revcomp(next_kmer, self.k) == kmer {
                     continue;
                 }
 
@@ -151,4 +156,67 @@ impl Viewed {
             true,
         );
     }
+}
+
+pub fn write_kmer_graph<W>(writer: &mut W, k: u8, solid: &Graph) -> Result<()>
+where
+    W: std::io::Write,
+{
+    writeln!(writer, "H\tVN:Z:1.0")?;
+    for kmer in 0..cocktail::kmer::get_kmer_space_size(k) {
+        if !solid.is_solid(kmer) {
+            continue;
+        }
+
+        let cano = cocktail::kmer::cannonical(kmer, k);
+
+        writeln!(
+            writer,
+            "S\t{}\t{}\tRC:Z:{} RB:i:{}",
+            cano,
+            cocktail::kmer::kmer2seq(cano, k),
+            cocktail::kmer::kmer2seq(cocktail::kmer::revcomp(cano, k), k),
+            cocktail::kmer::revcomp(cano, k)
+        )?;
+
+        if let Some((preds, ovl_len)) = solid.predecessors(cano) {
+            for predecessor in preds {
+                let pred_sign = if cocktail::kmer::parity_even(predecessor) {
+                    ('+', '-')
+                } else {
+                    ('-', '+')
+                };
+
+                writeln!(
+                    writer,
+                    "L\t{}\t{}\t{}\t+\t{}M",
+                    cocktail::kmer::cannonical(predecessor, k),
+                    pred_sign.0,
+                    cano,
+                    k - ovl_len
+                )?;
+            }
+        }
+
+        if let Some((succs, ovl_len)) = solid.successors(cano) {
+            for successor in succs {
+                let succ_sign = if cocktail::kmer::parity_even(successor) {
+                    ('+', '-')
+                } else {
+                    ('-', '+')
+                };
+
+                writeln!(
+                    writer,
+                    "L\t{}\t+\t{}\t{}\t{}M",
+                    cano,
+                    cocktail::kmer::cannonical(successor, k),
+                    succ_sign.0,
+                    k - ovl_len
+                )?;
+            }
+        }
+    }
+
+    Ok(())
 }

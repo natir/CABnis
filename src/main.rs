@@ -64,15 +64,23 @@ fn main() -> Result<()> {
 
     let (k, data) = utils::get_count(&params)?;
 
-    let solid = graph::Graph::new(data, k, params.edge_threshold);
-    let mut visited = graph::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
+    let solid = graph::kmer::Graph::new(data, k, params.edge_threshold);
 
-    let mut unitigs_cpt = 0;
-    let mut ext2tig_beg = std::collections::HashMap::new();
-    let mut ext2tig_end = std::collections::HashMap::new();
-    let mut ends2tig = std::collections::HashMap::new();
+    if let Some(out_path) = &params.kmer {
+        info!("Begin of kmer graph building");
+        let mut kmer_writer =
+            std::io::BufWriter::new(std::fs::File::create(&out_path).with_context(|| {
+                Error::CantWriteFile {
+                    filename: out_path.to_string(),
+                }
+            })?);
+
+        graph::kmer::write_kmer_graph(&mut kmer_writer, k, &solid)?;
+        info!("End of kmer graph building");
+    }
 
     info!("Begin of unitig building");
+
     let mut unitigs_writer =
         std::io::BufWriter::new(std::fs::File::create(&params.unitigs).with_context(|| {
             Error::CantWriteFile {
@@ -80,36 +88,14 @@ fn main() -> Result<()> {
             }
         })?);
 
-    for kmer in 0..cocktail::kmer::get_kmer_space_size(k) {
-        if !solid.is_solid(kmer) {
-            continue;
-        }
-
-        if visited.contains(kmer) {
-            continue;
-        }
-
-        visited.insert(kmer);
-        if let Some((tig, begin, end)) = utils::build_tig(kmer, k, &solid, &mut visited) {
-            ext2tig_beg
-                .entry(begin)
-                .or_insert_with(Vec::new)
-                .push(unitigs_cpt);
-            ext2tig_end
-                .entry(end)
-                .or_insert_with(Vec::new)
-                .push(unitigs_cpt);
-            ends2tig
-                .entry(utils::normalize_u64_2tuple((begin, end)))
-                .or_insert_with(Vec::new)
-                .push(unitigs_cpt);
-	    unitigs_cpt += 1;
-            writeln!(unitigs_writer, ">{}\tln:i:{}\n{}", unitigs_cpt, tig.len(), tig)?;
-        } else {
-            continue;
-        }
-    }
+    let (ends2tig, ext_nodes, tig_nodes, mut unitig_graph) =
+        graph::unitig::write_unitig(&mut unitigs_writer, k, &solid)?;
     info!("End of unitig building");
+
+    info!("Begin of unitg graph building");
+    unitig_graph = graph::unitig::add_missing_edge(ext_nodes, solid, k, unitig_graph);
+    //println!("{:?}", petgraph::dot::Dot::new(&unitig_graph));
+    info!("End of unitig graph building");
 
     info!("Begin of unitig graph writting");
     let mut graph_writer =
@@ -127,41 +113,57 @@ fn main() -> Result<()> {
             }
         }
     }
-    
-    info!("\twriting of S {} records", unitigs_cpt);
+
     writeln!(graph_writer, "H\tVN:Z:1.0")?;
-    for i in 0..unitigs_cpt {
-        writeln!(graph_writer, "S\t{}\t*", i)?;
+
+    info!("\tBegin of S record writing");
+    for node in unitig_graph.nodes() {
+        if let graph::unitig::Node::Tig(n) = node {
+            writeln!(
+                graph_writer,
+                "S\t{}\t*\tLN:i:{}\tcircular:Z:{}",
+                n.id, n.len, n.circular
+            )?;
+        }
     }
-    
-    info!("\twriting of L record");
-    for (begin, tigs) in ext2tig_beg.iter() {
-        for tig in tigs {
-            for link in
-                utils::create_link(*tig, *begin, &ext2tig_end, &ext2tig_beg, true, &paralelle_tig)
-            {
-                writeln!(
-                    graph_writer,
-                    "L\t{}\t{}\t{}\t{}\t14M",
-                    link.0, link.1, link.2, link.3
-                )?;
+
+    info!("\tEnd of S record writing");
+
+    info!("\tBegin of L record writing");
+    for node in tig_nodes {
+        if let graph::unitig::Node::Tig(n) = node {
+            if n.circular {
+                writeln!(graph_writer, "L\t{}\t-\t{}\t+\t14M", n.id, n.id)?;
             }
         }
     }
 
-    for (end, tigs) in ext2tig_end.iter() {
-        for tig in tigs {
-            for link in
-                utils::create_link(*tig, *end, &ext2tig_end, &ext2tig_beg, false, &paralelle_tig)
-            {
-                writeln!(
-                    graph_writer,
-                    "L\t{}\t{}\t{}\t{}\t14M",
-                    link.0, link.1, link.2, link.3
-                )?;
-            }
+    for link in graph::unitig::tig_kmer_tig(&unitig_graph) {
+        if paralelle_tig.contains(&utils::normalize_usize_2tuple((link.0, link.2))) {
+            continue;
         }
+
+        writeln!(
+            graph_writer,
+            "L\t{}\t{}\t{}\t{}\t14M",
+            link.0, link.1, link.2, link.3
+        )?;
     }
+
+    for link in graph::unitig::tig_kmer_kmer_tig(&unitig_graph) {
+        if paralelle_tig.contains(&utils::normalize_usize_2tuple((link.0, link.2))) {
+            continue;
+        }
+
+        writeln!(
+            graph_writer,
+            "L\t{}\t{}\t{}\t{}\t14M",
+            link.0, link.1, link.2, link.3
+        )?;
+    }
+
+    info!("\tEnd of L record writing");
+
     info!("End of unitig graph writting");
 
     Ok(())

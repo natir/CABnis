@@ -32,8 +32,8 @@ use crate::graph;
 pub fn build_tig(
     kmer: u64,
     k: u8,
-    solid: &graph::Graph,
-    visited: &mut graph::Viewed,
+    solid: &graph::kmer::Graph,
+    visited: &mut graph::kmer::Viewed,
 ) -> Option<(String, u64, u64)> {
     let mut tig = std::collections::VecDeque::new();
 
@@ -114,55 +114,6 @@ fn add_kmer_in_tig(
             tig.push_back(n);
         }
     }
-}
-
-pub fn create_link(
-    tig: usize,
-    end: u64,
-    first_ends: &std::collections::HashMap<u64, Vec<usize>>,
-    second_ends: &std::collections::HashMap<u64, Vec<usize>>,
-    other_before: bool,
-    paralelle_tig: &std::collections::HashSet<(usize, usize)>,
-) -> Vec<(usize, char, usize, char)> {
-    let mut ret = Vec::new();
-
-    if let Some(other_tigs) = first_ends.get(&end) {
-        for other_tig in other_tigs {
-            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, tig))) {
-                continue;
-            }
-
-            if other_tig == &tig {
-                continue;
-            }
-
-            if other_before {
-                ret.push((*other_tig, '+', tig, '+'));
-            } else {
-                ret.push((tig, '-', *other_tig, '+'));
-            }
-        }
-    }
-
-    if let Some(other_tigs) = second_ends.get(&end) {
-        for other_tig in other_tigs {
-            if paralelle_tig.contains(&normalize_usize_2tuple((*other_tig, tig))) {
-                continue;
-            }
-
-            if other_tig == &tig {
-                continue;
-            }
-
-            if other_before {
-                ret.push((*other_tig, '+', tig, '-'));
-            } else {
-                ret.push((tig, '+', *other_tig, '+'));
-            }
-        }
-    }
-
-    ret
 }
 
 pub fn normalize_u64_2tuple(mut a: (u64, u64)) -> (u64, u64) {

@@ -47,6 +47,9 @@ pub struct Command {
     )]
     pub unitigs: String,
 
+    #[structopt(short = "k", long = "kmer", help = "path of kmer graph output file")]
+    pub kmer: Option<String>,
+
     #[structopt(
         short = "t",
         long = "edge-weight-threshold",
