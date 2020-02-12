@@ -53,33 +53,39 @@ pub struct Kmer {
     pub id: u64,
 }
 
-fn build_link(s1: Node, t1: Node, s2: Node, t2:Node, graph: &petgraph::graphmap::UnGraphMap<Node, Edge>) -> Option<(usize, char, usize, char)> {
+fn build_link(
+    s1: Node,
+    t1: Node,
+    s2: Node,
+    t2: Node,
+    graph: &petgraph::graphmap::UnGraphMap<Node, Edge>,
+) -> Option<(usize, char, usize, char)> {
     if let Node::Tig(first) = s1 {
-	if let Node::Tig(second) = t2 {
+        if let Node::Tig(second) = t2 {
             if let Some(e1) = graph.edge_weight(s1, t1) {
-		if let Some(e2) = graph.edge_weight(s2, t2) {
+                if let Some(e2) = graph.edge_weight(s2, t2) {
                     if e1 == &Edge::Begin && e2 == &Edge::Begin {
-			Some((first.id, '-', second.id, '+'))
+                        Some((first.id, '-', second.id, '+'))
                     } else if e1 == &Edge::Begin && e2 == &Edge::End {
-			Some((first.id, '-', second.id, '-'))
+                        Some((first.id, '-', second.id, '-'))
                     } else if e1 == &Edge::End && e2 == &Edge::Begin {
-			Some((first.id, '+', second.id, '+'))
+                        Some((first.id, '+', second.id, '+'))
                     } else if e1 == &Edge::End && e2 == &Edge::End {
-			Some((first.id, '+', second.id, '-'))
+                        Some((first.id, '+', second.id, '-'))
                     } else {
-			None
-		    }
-		} else {
-		    None
-		}
+                        None
+                    }
+                } else {
+                    None
+                }
             } else {
-		None
-	    }
-	} else {
-	    None
-	}
+                None
+            }
+        } else {
+            None
+        }
     } else {
-	None
+        None
     }
 }
 
@@ -97,9 +103,9 @@ pub fn tig_kmer_tig(
                             continue;
                         }
 
-			if let Some(link) = build_link(node, nnode, nnode, nnnode, graph) {
-			    ret.insert(link);
-			}
+                        if let Some(link) = build_link(node, nnode, nnode, nnnode, graph) {
+                            ret.insert(link);
+                        }
                     }
                 }
             }
@@ -124,10 +130,11 @@ pub fn tig_kmer_kmer_tig(
                                 if nnnnode == node {
                                     continue;
                                 }
-	
-				if let Some(link) = build_link(node, nnode, nnnode, nnnnode, graph) {
-				    ret.insert(link);
-				}
+
+                                if let Some(link) = build_link(node, nnode, nnnode, nnnnode, graph)
+                                {
+                                    ret.insert(link);
+                                }
                             }
                         }
                     }
@@ -145,16 +152,12 @@ pub fn write_unitig<W>(
     solid: &graph::kmer::Graph,
 ) -> Result<(
     std::collections::HashMap<(u64, u64), Vec<usize>>,
-    Vec<Node>,
-    Vec<Node>,
     petgraph::graphmap::UnGraphMap<Node, Edge>,
 )>
 where
     W: std::io::Write,
 {
     let mut tig_counter = 0;
-    let mut ext_nodes = Vec::new();
-    let mut tig_nodes = Vec::new();
     let mut visited = graph::kmer::Viewed::new(cocktail::kmer::get_kmer_space_size(k), k);
     let mut ends2tig: std::collections::HashMap<(u64, u64), Vec<usize>> =
         std::collections::HashMap::new();
@@ -185,13 +188,10 @@ where
             let node_end = graph::unitig::Node::Kmer(graph::unitig::Kmer { id: end });
 
             unitig_graph.add_node(node_tig);
-            tig_nodes.push(node_tig);
 
             unitig_graph.add_node(node_begin);
-            ext_nodes.push(node_begin);
 
             unitig_graph.add_node(node_end);
-            ext_nodes.push(node_end);
 
             if let Some(edge) = unitig_graph.edge_weight(node_tig, node_begin) {
                 if edge == &graph::unitig::Edge::Begin {
@@ -226,16 +226,26 @@ where
         }
     }
 
-    Ok((ends2tig, ext_nodes, tig_nodes, unitig_graph))
+    Ok((ends2tig, unitig_graph))
 }
 
 pub fn add_missing_edge(
-    ext_nodes: Vec<Node>,
     solid: graph::kmer::Graph,
     k: u8,
     mut unitig_graph: petgraph::graphmap::UnGraphMap<Node, Edge>,
 ) -> petgraph::graphmap::UnGraphMap<Node, Edge> {
-    for node in ext_nodes {
+    let kmer_node: Vec<Node> = unitig_graph
+        .nodes()
+        .filter(|x| {
+            if let graph::unitig::Node::Kmer(_) = x {
+                true
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    for node in kmer_node {
         if let graph::unitig::Node::Kmer(n) = node {
             if let Some((succs, _)) = solid.successors(n.id) {
                 for succ in succs {

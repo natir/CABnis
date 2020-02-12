@@ -88,13 +88,11 @@ fn main() -> Result<()> {
             }
         })?);
 
-    let (ends2tig, ext_nodes, tig_nodes, mut unitig_graph) =
-        graph::unitig::write_unitig(&mut unitigs_writer, k, &solid)?;
+    let (ends2tig, mut unitig_graph) = graph::unitig::write_unitig(&mut unitigs_writer, k, &solid)?;
     info!("End of unitig building");
 
     info!("Begin of unitg graph building");
-    unitig_graph = graph::unitig::add_missing_edge(ext_nodes, solid, k, unitig_graph);
-    //println!("{:?}", petgraph::dot::Dot::new(&unitig_graph));
+    unitig_graph = graph::unitig::add_missing_edge(solid, k, unitig_graph);
     info!("End of unitig graph building");
 
     info!("Begin of unitig graph writting");
@@ -130,7 +128,7 @@ fn main() -> Result<()> {
     info!("\tEnd of S record writing");
 
     info!("\tBegin of L record writing");
-    for node in tig_nodes {
+    for node in unitig_graph.nodes() {
         if let graph::unitig::Node::Tig(n) = node {
             if n.circular {
                 writeln!(graph_writer, "L\t{}\t-\t{}\t+\t14M", n.id, n.id)?;
@@ -163,7 +161,6 @@ fn main() -> Result<()> {
     }
 
     info!("\tEnd of L record writing");
-
     info!("End of unitig graph writting");
 
     Ok(())
