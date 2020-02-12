@@ -80,7 +80,6 @@ fn main() -> Result<()> {
     }
 
     info!("Begin of unitig building");
-
     let mut unitigs_writer =
         std::io::BufWriter::new(std::fs::File::create(&params.unitigs).with_context(|| {
             Error::CantWriteFile {
@@ -88,7 +87,14 @@ fn main() -> Result<()> {
             }
         })?);
 
-    let (ends2tig, mut unitig_graph) = graph::unitig::write_unitig(&mut unitigs_writer, k, &solid)?;
+    let mut graph_writer =
+        std::io::BufWriter::new(std::fs::File::create(&params.graph).with_context(|| {
+            Error::CantWriteFile {
+                filename: params.graph.clone(),
+            }
+        })?);
+
+    let (ends2tig, mut unitig_graph) = graph::unitig::write_unitig(&mut unitigs_writer, &mut graph_writer, k, &solid)?;
     info!("End of unitig building");
 
     info!("Begin of unitg graph building");
@@ -96,12 +102,7 @@ fn main() -> Result<()> {
     info!("End of unitig graph building");
 
     info!("Begin of unitig graph writting");
-    let mut graph_writer =
-        std::io::BufWriter::new(std::fs::File::create(&params.graph).with_context(|| {
-            Error::CantWriteFile {
-                filename: params.graph.clone(),
-            }
-        })?);
+
 
     let mut paralelle_tig = std::collections::HashSet::new();
     for tigs in ends2tig.values() {

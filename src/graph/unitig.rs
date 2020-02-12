@@ -147,7 +147,8 @@ pub fn tig_kmer_kmer_tig(
 }
 
 pub fn write_unitig<W>(
-    writer: &mut W,
+    fasta: &mut W,
+    gfa: &mut W,
     k: u8,
     solid: &graph::kmer::Graph,
 ) -> Result<(
@@ -210,7 +211,7 @@ where
             }
 
             writeln!(
-                writer,
+                fasta,
                 ">{} LN:i:{} circular:Z:{} begin:i:{} end:i:{}\n{}",
                 tig_counter,
                 tig.len(),
@@ -219,6 +220,15 @@ where
                 end,
                 tig
             )?;
+
+	    writeln!(
+		gfa,
+		"S\t{}\t{}\tLN:i:{}\tCI:Z:{}",
+		tig_counter,
+		tig,
+		tig.len(),
+		begin == end,
+	    )?;
 
             tig_counter += 1;
         } else {
