@@ -53,13 +53,43 @@ pub struct Kmer {
     pub id: u64,
 }
 
+fn build_link(s1: Node, t1: Node, s2: Node, t2:Node, graph: &petgraph::graphmap::UnGraphMap<Node, Edge>) -> Option<(usize, char, usize, char)> {
+    if let Node::Tig(first) = s1 {
+	if let Node::Tig(second) = t2 {
+            if let Some(e1) = graph.edge_weight(s1, t1) {
+		if let Some(e2) = graph.edge_weight(s2, t2) {
+                    if e1 == &Edge::Begin && e2 == &Edge::Begin {
+			Some((first.id, '-', second.id, '+'))
+                    } else if e1 == &Edge::Begin && e2 == &Edge::End {
+			Some((first.id, '-', second.id, '-'))
+                    } else if e1 == &Edge::End && e2 == &Edge::Begin {
+			Some((first.id, '+', second.id, '+'))
+                    } else if e1 == &Edge::End && e2 == &Edge::End {
+			Some((first.id, '+', second.id, '-'))
+                    } else {
+			None
+		    }
+		} else {
+		    None
+		}
+            } else {
+		None
+	    }
+	} else {
+	    None
+	}
+    } else {
+	None
+    }
+}
+
 pub fn tig_kmer_tig(
     graph: &petgraph::graphmap::UnGraphMap<Node, Edge>,
 ) -> std::collections::HashSet<(usize, char, usize, char)> {
     let mut ret = std::collections::HashSet::new();
 
     for node in graph.nodes() {
-        if let Node::Tig(n) = node {
+        if let Node::Tig(_) = node {
             for nnode in graph.neighbors(node) {
                 if let Node::Kmer(_) = nnode {
                     for nnnode in graph.neighbors(nnode) {
@@ -67,21 +97,9 @@ pub fn tig_kmer_tig(
                             continue;
                         }
 
-                        if let Node::Tig(o_tig) = nnnode {
-                            if let Some(e1) = graph.edge_weight(node, nnode) {
-                                if let Some(e2) = graph.edge_weight(nnode, nnnode) {
-                                    if e1 == &Edge::Begin && e2 == &Edge::Begin {
-                                        ret.insert((n.id, '-', o_tig.id, '+'));
-                                    } else if e1 == &Edge::Begin && e2 == &Edge::End {
-                                        ret.insert((n.id, '-', o_tig.id, '-'));
-                                    } else if e1 == &Edge::End && e2 == &Edge::Begin {
-                                        ret.insert((n.id, '+', o_tig.id, '+'));
-                                    } else if e1 == &Edge::End && e2 == &Edge::End {
-                                        ret.insert((n.id, '+', o_tig.id, '-'));
-                                    }
-                                }
-                            }
-                        }
+			if let Some(link) = build_link(node, nnode, nnode, nnnode, graph) {
+			    ret.insert(link);
+			}
                     }
                 }
             }
@@ -97,7 +115,7 @@ pub fn tig_kmer_kmer_tig(
     let mut ret = std::collections::HashSet::new();
 
     for node in graph.nodes() {
-        if let Node::Tig(n) = node {
+        if let Node::Tig(_) = node {
             for nnode in graph.neighbors(node) {
                 if let Node::Kmer(_) = nnode {
                     for nnnode in graph.neighbors(nnode) {
@@ -106,22 +124,10 @@ pub fn tig_kmer_kmer_tig(
                                 if nnnnode == node {
                                     continue;
                                 }
-
-                                if let Node::Tig(o_tig) = nnnnode {
-                                    if let Some(e1) = graph.edge_weight(node, nnode) {
-                                        if let Some(e2) = graph.edge_weight(nnnode, nnnnode) {
-                                            if e1 == &Edge::Begin && e2 == &Edge::Begin {
-                                                ret.insert((n.id, '-', o_tig.id, '+'));
-                                            } else if e1 == &Edge::Begin && e2 == &Edge::End {
-                                                ret.insert((n.id, '-', o_tig.id, '-'));
-                                            } else if e1 == &Edge::End && e2 == &Edge::Begin {
-                                                ret.insert((n.id, '+', o_tig.id, '+'));
-                                            } else if e1 == &Edge::End && e2 == &Edge::End {
-                                                ret.insert((n.id, '+', o_tig.id, '-'));
-                                            }
-                                        }
-                                    }
-                                }
+	
+				if let Some(link) = build_link(node, nnode, nnnode, nnnnode, graph) {
+				    ret.insert(link);
+				}
                             }
                         }
                     }
