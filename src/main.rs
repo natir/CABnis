@@ -93,6 +93,7 @@ fn main() -> Result<()> {
                 filename: params.graph.clone(),
             }
         })?);
+    writeln!(graph_writer, "H\tVN:Z:1.0")?;
 
     let (ends2tig, mut unitig_graph) = graph::unitig::write_unitig(&mut unitigs_writer, &mut graph_writer, k, &solid)?;
     info!("End of unitig building");
@@ -112,21 +113,6 @@ fn main() -> Result<()> {
             }
         }
     }
-
-    writeln!(graph_writer, "H\tVN:Z:1.0")?;
-
-    info!("\tBegin of S record writing");
-    for node in unitig_graph.nodes() {
-        if let graph::unitig::Node::Tig(n) = node {
-            writeln!(
-                graph_writer,
-                "S\t{}\t*\tLN:i:{}\tcircular:Z:{}",
-                n.id, n.len, n.circular
-            )?;
-        }
-    }
-
-    info!("\tEnd of S record writing");
 
     info!("\tBegin of L record writing");
     for node in unitig_graph.nodes() {
