@@ -21,6 +21,7 @@ SOFTWARE.
  */
 
 /* crate use */
+use rustc_hash;
 use anyhow::Result;
 use itertools::Itertools;
 
@@ -53,7 +54,7 @@ fn build_subkmer(deep: u8) -> Vec<Vec<u64>> {
 }
 
 pub struct Graph {
-    solidity: bv::BitVec<u8>,
+    solidity: rustc_hash::FxHashSet<u64>,
     kmermasks: Vec<u64>,
     subkmer: Vec<Vec<u64>>,
     max_deep: u8,
@@ -62,8 +63,16 @@ pub struct Graph {
 
 impl Graph {
     pub fn new(solidity: bv::BitVec<u8>, k: u8, max_deep: u8) -> Self {
+	let mut set = rustc_hash::FxHashSet::default();
+
+	for hash in 0..cocktail::kmer::get_hash_space_size(k) {
+	    if solidity.get(hash) {
+		set.insert(hash);
+	    }
+	}
+	
         Graph {
-            solidity,
+            solidity: set,
             kmermasks: build_kmermasks(max_deep, k),
             subkmer: build_subkmer(max_deep),
             max_deep,
@@ -72,7 +81,7 @@ impl Graph {
     }
 
     pub fn is_solid(&self, kmer: u64) -> bool {
-        self.solidity.get(cocktail::kmer::remove_first_bit(
+        self.solidity.contains(&cocktail::kmer::remove_first_bit(
             cocktail::kmer::cannonical(kmer, self.k),
         ))
     }
