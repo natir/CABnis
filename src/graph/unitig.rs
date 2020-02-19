@@ -212,23 +212,25 @@ where
 
             writeln!(
                 fasta,
-                ">{} LN:i:{} circular:Z:{} begin:i:{} end:i:{}\n{}",
+                ">{} LN:i:{} circular:Z:{} begin:i:{} end:i:{}",
                 tig_counter,
                 tig.len(),
                 begin == end,
                 begin,
                 end,
-                tig
             )?;
 
-            writeln!(
-                gfa,
-                "S\t{}\t{}\tLN:i:{}\tCI:Z:{}",
-                tig_counter,
-                tig,
-                tig.len(),
-                begin == end,
-            )?;
+            let (first_part, second_part) = tig.as_slices();
+            fasta.write_all(first_part)?;
+            fasta.write_all(second_part)?;
+            fasta.write_all(b"\n")?;
+
+            write!(gfa, "S\t{}\t", tig_counter)?;
+
+            gfa.write_all(first_part)?;
+            gfa.write_all(second_part)?;
+
+            writeln!(gfa, "\tLN:i:{}\tCI:Z:{}", tig.len(), begin == end,)?;
 
             tig_counter += 1;
         } else {

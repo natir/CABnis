@@ -34,11 +34,11 @@ pub fn build_tig(
     k: u8,
     solid: &graph::kmer::Graph,
     visited: &mut graph::kmer::Viewed,
-) -> Option<(String, u64, u64)> {
+) -> Option<(std::collections::VecDeque<u8>, u64, u64)> {
     let mut tig = std::collections::VecDeque::new();
 
     let mut current = kmer;
-    for n in cocktail::kmer::kmer2seq(current, k).chars() {
+    for n in cocktail::kmer::kmer2seq(current, k).bytes() {
         tig.push_back(n);
     }
 
@@ -87,10 +87,8 @@ pub fn build_tig(
         return None;
     }
 
-    let ret_tig = tig.iter().copied().collect::<String>();
-
     Some((
-        ret_tig,
+        tig,
         cocktail::kmer::cannonical(begin, k),
         cocktail::kmer::cannonical(current, k),
     ))
@@ -100,17 +98,17 @@ fn add_kmer_in_tig(
     kmer: u64,
     k: u8,
     not_ovl_len: u8,
-    tig: &mut std::collections::VecDeque<char>,
+    tig: &mut std::collections::VecDeque<u8>,
     in_front: bool,
 ) {
     if in_front {
         let seq = cocktail::kmer::kmer2seq(kmer, k);
-        for n in seq[..not_ovl_len as usize].chars().rev() {
+        for n in seq[..not_ovl_len as usize].bytes().rev() {
             tig.push_front(n);
         }
     } else {
         let seq = cocktail::kmer::kmer2seq(kmer, k);
-        for n in seq[(k - not_ovl_len) as usize..].chars() {
+        for n in seq[(k - not_ovl_len) as usize..].bytes() {
             tig.push_back(n);
         }
     }
