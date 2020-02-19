@@ -221,14 +221,14 @@ where
                 tig
             )?;
 
-	    writeln!(
-		gfa,
-		"S\t{}\t{}\tLN:i:{}\tCI:Z:{}",
-		tig_counter,
-		tig,
-		tig.len(),
-		begin == end,
-	    )?;
+            writeln!(
+                gfa,
+                "S\t{}\t{}\tLN:i:{}\tCI:Z:{}",
+                tig_counter,
+                tig,
+                tig.len(),
+                begin == end,
+            )?;
 
             tig_counter += 1;
         } else {

@@ -21,7 +21,14 @@ SOFTWARE.
  */
 
 /* crate use */
+use anyhow::Result;
 use structopt::StructOpt;
+
+/* standard use */
+use std::io::Write;
+
+/* termcolor use */
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[derive(StructOpt, Debug)]
 #[structopt(
@@ -60,6 +67,210 @@ pub struct Command {
 
     #[structopt(subcommand)]
     pub subcmd: SubCommand,
+
+    #[structopt(long = "unicorn", hidden = true)]
+    pub unicorn: bool,
+}
+
+pub(crate) fn unicorn() -> Result<()> {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "                                                    / "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "                                                  .7  "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "                                       \\       , //  "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+    writeln!(
+        stdout,
+        "                                       |\\.--._/|//   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue)))?;
+    writeln!(
+        stdout,
+        "                                      /\\ ) ) ).'/    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))?;
+    writeln!(
+        stdout,
+        "                                     /(  \\  // /     "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "                                    /(   J`((_/ \\    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "                                   / ) | _\\     /    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "                                  /|)  \\  eJ    L    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+    writeln!(
+        stdout,
+        "                                 |  \\ L \\   L   L   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue)))?;
+    writeln!(
+        stdout,
+        "                                /  \\  J  `. J   L    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))?;
+    writeln!(
+        stdout,
+        "                                |  )   L   \\/   \\   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "                               /  \\    J   (\\   /   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "             _....___         |  \\      \\   \\```   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "      ,.._.-'        '''--...-||\\     -. \\   \\     "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+    writeln!(
+        stdout,
+        "    .'.=.'                    `         `.\\ [ Y      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue)))?;
+    writeln!(
+        stdout,
+        "   /   /                                  \\]  J      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))?;
+    writeln!(
+        stdout,
+        "  Y / Y                                    Y   L      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "  | | |          \\                         |   L     "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "  | | |           Y                        A  J       "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "  |   I           |                       /I\\ /      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+    writeln!(
+        stdout,
+        "  |    \\          I             \\        ( |]/|     "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue)))?;
+    writeln!(
+        stdout,
+        "  J     \\         /._           /        -tI/ |      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))?;
+    writeln!(
+        stdout,
+        "   L     )       /   /'-------'J           `'-:.      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "   J   .'      ,'  ,' ,     \\   `'-.__          \\   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "    \\ T      ,'  ,'   )\\    /|        ';'---7   /   "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "     \\|    ,'L  Y...-' / _.' /         \\   /   /    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+    writeln!(
+        stdout,
+        "      J   Y  |  J    .'-'   /         ,--.(   /       "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue)))?;
+    writeln!(
+        stdout,
+        "       L  |  J   L -'     .'         /  |    /\\      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))?;
+    writeln!(
+        stdout,
+        "       |  J.  L  J     .-;.-/       |    \\ .' /      "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "       J   L`-J   L____,.-'`        |  _.-'   |       "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "        L  J   L  J                  ``  J    |       "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "        J   L  |   L                     J    |       "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+    writeln!(
+        stdout,
+        "         L  J  L    \\                    L    \\     "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue)))?;
+    writeln!(
+        stdout,
+        "         |   L  ) _.'\\                    ) _.'\\    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))?;
+    writeln!(
+        stdout,
+        "         L    \\('`    \\                  ('`    \\  "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+    writeln!(
+        stdout,
+        "          ) _.'\\`-....'                   `-....'    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Ansi256(208))))?;
+    writeln!(
+        stdout,
+        "         ('`    \\                                    "
+    )?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+    writeln!(
+        stdout,
+        "          `-.___/                                     "
+    )?;
+
+    Ok(())
 }
 
 #[derive(StructOpt, Debug)]

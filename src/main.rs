@@ -24,6 +24,7 @@ SOFTWARE.
 /* cli management*/
 #[macro_use]
 extern crate structopt;
+extern crate termcolor;
 
 /* error and logging */
 #[macro_use]
@@ -62,6 +63,10 @@ fn main() -> Result<()> {
 
     let params = cli::Command::from_args();
 
+    if params.unicorn {
+        return cli::unicorn();
+    }
+
     let (k, data) = utils::get_count(&params)?;
 
     let solid = graph::kmer::Graph::new(data, k, params.edge_threshold);
@@ -95,7 +100,8 @@ fn main() -> Result<()> {
         })?);
     writeln!(graph_writer, "H\tVN:Z:1.0")?;
 
-    let (ends2tig, mut unitig_graph) = graph::unitig::write_unitig(&mut unitigs_writer, &mut graph_writer, k, &solid)?;
+    let (ends2tig, mut unitig_graph) =
+        graph::unitig::write_unitig(&mut unitigs_writer, &mut graph_writer, k, &solid)?;
     info!("End of unitig building");
 
     info!("Begin of unitg graph building");
@@ -103,7 +109,6 @@ fn main() -> Result<()> {
     info!("End of unitig graph building");
 
     info!("Begin of unitig graph writting");
-
 
     let mut paralelle_tig = std::collections::HashSet::new();
     for tigs in ends2tig.values() {

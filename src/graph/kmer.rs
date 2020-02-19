@@ -21,9 +21,9 @@ SOFTWARE.
  */
 
 /* crate use */
-use rustc_hash;
 use anyhow::Result;
 use itertools::Itertools;
+use rustc_hash;
 
 fn build_kmermasks(deep: u8, k: u8) -> Vec<u64> {
     let mut kmermasks = Vec::new();
@@ -63,14 +63,14 @@ pub struct Graph {
 
 impl Graph {
     pub fn new(solidity: bv::BitVec<u8>, k: u8, max_deep: u8) -> Self {
-	let mut set = rustc_hash::FxHashSet::default();
+        let mut set = rustc_hash::FxHashSet::default();
 
-	for hash in 0..cocktail::kmer::get_hash_space_size(k) {
-	    if solidity.get(hash) {
-		set.insert(hash);
-	    }
-	}
-	
+        for hash in 0..cocktail::kmer::get_hash_space_size(k) {
+            if solidity.get(hash) {
+                set.insert(hash);
+            }
+        }
+
         Graph {
             solidity: set,
             kmermasks: build_kmermasks(max_deep, k),
