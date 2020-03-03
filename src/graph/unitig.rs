@@ -188,26 +188,26 @@ where
             let node_begin = graph::unitig::Node::Kmer(graph::unitig::Kmer { id: begin });
             let node_end = graph::unitig::Node::Kmer(graph::unitig::Kmer { id: end });
 
-            unitig_graph.add_node(node_tig);
+            //unitig_graph.add_node(node_tig);
 
-            unitig_graph.add_node(node_begin);
+            //unitig_graph.add_node(node_begin);
 
-            unitig_graph.add_node(node_end);
+            //unitig_graph.add_node(node_end);
 
             if let Some(edge) = unitig_graph.edge_weight(node_tig, node_begin) {
                 if edge == &graph::unitig::Edge::Begin {
-                    unitig_graph.add_edge(node_tig, node_begin, graph::unitig::Edge::Both);
+                    //unitig_graph.add_edge(node_tig, node_begin, graph::unitig::Edge::Both);
                 }
             } else {
-                unitig_graph.add_edge(node_tig, node_begin, graph::unitig::Edge::Begin);
+                //unitig_graph.add_edge(node_tig, node_begin, graph::unitig::Edge::Begin);
             }
 
             if let Some(edge) = unitig_graph.edge_weight(node_tig, node_end) {
                 if edge == &graph::unitig::Edge::End {
-                    unitig_graph.add_edge(node_tig, node_end, graph::unitig::Edge::End);
+                    //unitig_graph.add_edge(node_tig, node_end, graph::unitig::Edge::End);
                 }
             } else {
-                unitig_graph.add_edge(node_tig, node_end, graph::unitig::Edge::End);
+                //unitig_graph.add_edge(node_tig, node_end, graph::unitig::Edge::End);
             }
 
             writeln!(
@@ -264,11 +264,11 @@ pub fn add_missing_edge(
                     let cano = cocktail::kmer::cannonical(succ, k);
                     let node_succ = graph::unitig::Node::Kmer(graph::unitig::Kmer { id: cano });
                     if unitig_graph.contains_node(node_succ) {
-                        unitig_graph.add_edge(
+                        /*unitig_graph.add_edge(
                             graph::unitig::Node::Kmer(n),
                             node_succ,
                             graph::unitig::Edge::Kmer,
-                        );
+                        );*/
                     }
                 }
             }
@@ -278,11 +278,11 @@ pub fn add_missing_edge(
                     let cano = cocktail::kmer::cannonical(pred, k);
                     let node_pred = graph::unitig::Node::Kmer(graph::unitig::Kmer { id: cano });
                     if unitig_graph.contains_node(node_pred) {
-                        unitig_graph.add_edge(
+                        /*unitig_graph.add_edge(
                             graph::unitig::Node::Kmer(n),
                             node_pred,
                             graph::unitig::Edge::Kmer,
-                        );
+                        );*/
                     }
                 }
             }
